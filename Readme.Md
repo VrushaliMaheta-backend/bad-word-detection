@@ -1,4 +1,4 @@
-** Go a Step through for setup this project**
+## Go a Step through for setup this project
 
 - Step-1 : Require Python install from https://www.python.org/downloads/
 - Step-2 : For set up this project require git access and use 
