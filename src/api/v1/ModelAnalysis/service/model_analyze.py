@@ -1,23 +1,72 @@
 import os
+import spacy
 import pickle
 import tempfile
 from io import BytesIO
+from fuzzywuzzy import fuzz
 from pydub import AudioSegment
 import speech_recognition as sr
 from fastapi import HTTPException
+from better_profanity import profanity
+from nltk.stem.snowball import SnowballStemmer
 
 file_name = os.getcwd() + "/bad_word_classifier.pkl"
 
+def text_cleaning(text_data):
+    word_list = []
+    for words in text_data:
+        if words.is_stop or words.is_punct:
+            pass
+        else:
+            word_list.append(words.text)
+    return word_list
+
+def check_similarity(text_data,badwords,threshold=85):
+    with open(os.getcwd() + "/badwords.txt","r") as f:
+        badword = [line.strip() for line in f.readlines()]
+
+    badwords += badword
+    badword_list = []
+    for words in text_data:
+        for badword in badwords:
+            stem_word = SnowballStemmer(language="english").stem(words)
+            similarity = fuzz.ratio(badword,stem_word)
+            if similarity >= threshold:
+                badword_list.append(words)
+                break
+    return list(set(badword_list))
+
 def bad_word_prediction(text):
+    # get list of badwords from a profanity.CENSOR_WORDSET
+    badwords = []
+    for words in profanity.CENSOR_WORDSET:
+        badwords.append(str(words))
+
+    # read a file
     with open(file_name,"rb") as file:
         model = pickle.load(file)
     
+    # load spacy
+    nlp = spacy.load("en_core_web_sm")
+    data = nlp(text)
+
+    # text cleaning process and check similarity with badwords
+    cleaned_res = text_cleaning(data)
+    res = check_similarity(cleaned_res,badwords)
+
     prediction = model.predict([text])
 
     if prediction[0] == 1:
-        return "Phrase has bad words!!"
+        return {
+            "text":text,
+            "it_is_curse_phrase":"YES",
+            "bad_words":res
+        }
     else:
-        return "No bad words detect!!It's clean text"
+        return {
+            "text":text,
+            "it_is_curse_phrase":"NO"
+        }
 
 def convert_mp3_to_wav(mp3_file_path):
     audio = AudioSegment.from_mp3(mp3_file_path)
